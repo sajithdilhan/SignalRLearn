@@ -1,0 +1,191 @@
+@page "/"
+@implements IDisposable
+@inject OrderApiClient Api
+@inject OrderState Orders
+@inject OrderRealtimeClient Realtime
+
+<PageTitle>Orders · Order Pulse</PageTitle>
+
+<section class="hero">
+    <div>
+        <p class="eyebrow">LIVE OPERATIONS</p>
+        <h1>Every order, <span>right now.</span></h1>
+        <p class="hero-copy">Create an order here—or change one through Scalar—and watch every connected browser react instantly.</p>
+    </div>
+    <button class="button primary" @onclick="ToggleCreateForm">
+        @(_showCreateForm ? "Close form" : "+ New order")
+    </button>
+</section>
+
+@if (_showCreateForm)
+{
+    <section class="create-panel">
+        <div class="section-heading">
+            <div><p class="eyebrow">REST COMMAND</p><h2>Create an order</h2></div>
+            <span>POST /api/orders</span>
+        </div>
+        <EditForm Model="_newOrder" OnValidSubmit="CreateOrderAsync">
+            <DataAnnotationsValidator />
+            <div class="form-grid">
+                <label>
+                    Customer
+                    <InputText @bind-Value="_newOrder.CustomerName" placeholder="e.g. Sam Lee" />
+                    <ValidationMessage For="() => _newOrder.CustomerName" />
+                </label>
+                <label>
+                    Product
+                    <InputText @bind-Value="_newOrder.ProductName" placeholder="e.g. Mechanical keyboard" />
+                    <ValidationMessage For="() => _newOrder.ProductName" />
+                </label>
+                <label class="quantity-field">
+                    Quantity
+                    <InputNumber @bind-Value="_newOrder.Quantity" />
+                    <ValidationMessage For="() => _newOrder.Quantity" />
+                </label>
+                <button class="button primary submit" type="submit" disabled="@_isSaving">
+                    @(_isSaving ? "Creating…" : "Create order")
+                </button>
+            </div>
+        </EditForm>
+        @if (!string.IsNullOrWhiteSpace(_formMessage))
+        {
+            <p class="form-message @(_formHasError ? "error" : "success")">@_formMessage</p>
+        }
+    </section>
+}
+
+<section class="metrics" aria-label="Order summary">
+    <div><span>All orders</span><strong>@Orders.Orders.Count</strong></div>
+    <div><span>Processing</span><strong>@Count(OrderStatus.Processing)</strong></div>
+    <div><span>In transit</span><strong>@Count(OrderStatus.Shipped)</strong></div>
+    <div><span>Delivered</span><strong>@Count(OrderStatus.Delivered)</strong></div>
+</section>
+
+<section class="orders-section">
+    <div class="section-heading">
+        <div><p class="eyebrow">ORDER STREAM</p><h2>Recent orders</h2></div>
+        <span class="event-note"><i></i> SignalR updates this list</span>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="empty-state"><div class="spinner"></div><p>Loading the order stream…</p></div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_loadError))
+    {
+        <div class="empty-state error-state">
+            <h3>Couldn’t reach the API</h3>
+            <p>@_loadError</p>
+            <button class="button secondary" @onclick="LoadOrdersAsync">Try again</button>
+        </div>
+    }
+    else if (Orders.Orders.Count == 0)
+    {
+        <div class="empty-state"><h3>No orders yet</h3><p>Create the first order to see the live flow.</p></div>
+    }
+    else
+    {
+        <div class="order-list">
+            @foreach (var order in Orders.Orders)
+            {
+                <NavLink class="order-row" href="@($"orders/{order.Id}")" @key="order.Id">
+                    <div class="product-icon">@Initials(order.ProductName)</div>
+                    <div class="order-primary">
+                        <strong>@order.ProductName</strong>
+                        <span>@order.CustomerName · Qty @order.Quantity</span>
+                    </div>
+                    <StatusBadge Status="order.Status" />
+                    <div class="order-time">
+                        <strong>@RelativeTime(order.UpdatedAtUtc)</strong>
+                        <span>@order.Id.ToString()[..8]</span>
+                    </div>
+                    <span class="row-arrow">→</span>
+                </NavLink>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    private CreateOrderRequest _newOrder = new();
+    private bool _isLoading = true;
+    private bool _isSaving;
+    private bool _showCreateForm;
+    private bool _formHasError;
+    private string? _loadError;
+    private string? _formMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Orders.Changed += HandleOrdersChanged;
+        await LoadOrdersAsync();
+    }
+
+    private async Task LoadOrdersAsync()
+    {
+        _isLoading = true;
+        _loadError = null;
+        try
+        {
+            await Realtime.EnsureStartedAsync();
+            Orders.MergeSnapshot(await Api.GetOrdersAsync());
+        }
+        catch (Exception exception)
+        {
+            _loadError = exception.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task CreateOrderAsync()
+    {
+        _isSaving = true;
+        _formMessage = null;
+        try
+        {
+            var created = await Api.CreateOrderAsync(_newOrder);
+            Orders.Upsert(created);
+            _newOrder = new CreateOrderRequest();
+            _formHasError = false;
+            _formMessage = "Order created. Every connected client has been notified.";
+        }
+        catch (Exception exception)
+        {
+            _formHasError = true;
+            _formMessage = exception.Message;
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void ToggleCreateForm()
+    {
+        _showCreateForm = !_showCreateForm;
+        _formMessage = null;
+    }
+
+    private int Count(OrderStatus status) => Orders.Orders.Count(order => order.Status == status);
+
+    private static string Initials(string productName) => string.Concat(productName
+        .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+        .Take(2)
+        .Select(word => char.ToUpperInvariant(word[0])));
+
+    private static string RelativeTime(DateTimeOffset timestamp)
+    {
+        var elapsed = DateTimeOffset.UtcNow - timestamp;
+        if (elapsed.TotalMinutes < 1) return "just now";
+        if (elapsed.TotalHours < 1) return $"{(int)elapsed.TotalMinutes}m ago";
+        if (elapsed.TotalDays < 1) return $"{(int)elapsed.TotalHours}h ago";
+        return $"{(int)elapsed.TotalDays}d ago";
+    }
+
+    private void HandleOrdersChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Orders.Changed -= HandleOrdersChanged;
+}

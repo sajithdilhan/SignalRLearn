@@ -1,0 +1,182 @@
+@page "/orders/{Id:guid}"
+@implements IDisposable
+@inject OrderApiClient Api
+@inject OrderState Orders
+@inject OrderRealtimeClient Realtime
+
+<PageTitle>Order details · Order Pulse</PageTitle>
+
+<NavLink class="back-link" href="">← Back to all orders</NavLink>
+
+@if (_isLoading)
+{
+    <div class="empty-state standalone"><div class="spinner"></div><p>Loading order details…</p></div>
+}
+else if (_order is null)
+{
+    <div class="empty-state standalone">
+        <p class="eyebrow">NOT FOUND</p>
+        <h1>We couldn’t find this order.</h1>
+        <p>@_error</p>
+        <NavLink class="button primary" href="">Return to orders</NavLink>
+    </div>
+}
+else
+{
+    <section class="detail-hero">
+        <div>
+            <p class="eyebrow">ORDER @_order.Id.ToString()[..8].ToUpperInvariant()</p>
+            <h1>@_order.ProductName</h1>
+            <p>Placed for @_order.CustomerName</p>
+        </div>
+        <StatusBadge Status="_order.Status" />
+    </section>
+
+    <div class="detail-grid">
+        <section class="detail-card timeline-card">
+            <div class="section-heading">
+                <div><p class="eyebrow">LIVE STATUS</p><h2>Order journey</h2></div>
+                <span class="event-note"><i></i> Listening for updates</span>
+            </div>
+
+            @if (_order.Status == OrderStatus.Cancelled)
+            {
+                <div class="cancelled-callout">
+                    <strong>Order cancelled</strong>
+                    <span>This order has reached a terminal state.</span>
+                </div>
+            }
+            else
+            {
+                <div class="timeline">
+                    @foreach (var status in JourneyStatuses)
+                    {
+                        <div class="timeline-step @(IsReached(status) ? "reached" : "") @(status == _order.Status ? "current" : "")">
+                            <span class="step-dot">@(IsReached(status) ? "✓" : "")</span>
+                            <div>
+                                <strong>@status</strong>
+                                <small>@StatusDescription(status)</small>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (_order.Status.ValidNextStatuses().Count > 0)
+            {
+                <div class="status-actions">
+                    <p>Move this order to:</p>
+                    @foreach (var nextStatus in _order.Status.ValidNextStatuses())
+                    {
+                        <button class="button @(nextStatus == OrderStatus.Cancelled ? "danger" : "primary")"
+                                disabled="@_isSaving"
+                                @onclick="() => UpdateStatusAsync(nextStatus)">
+                            @nextStatus
+                        </button>
+                    }
+                </div>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <p class="form-message error">@_error</p>
+            }
+        </section>
+
+        <aside class="detail-card facts-card">
+            <p class="eyebrow">ORDER FACTS</p>
+            <dl>
+                <div><dt>Customer</dt><dd>@_order.CustomerName</dd></div>
+                <div><dt>Product</dt><dd>@_order.ProductName</dd></div>
+                <div><dt>Quantity</dt><dd>@_order.Quantity</dd></div>
+                <div><dt>Created</dt><dd>@_order.CreatedAtUtc.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</dd></div>
+                <div><dt>Last update</dt><dd>@_order.UpdatedAtUtc.ToLocalTime().ToString("dd MMM yyyy, HH:mm:ss")</dd></div>
+            </dl>
+            <div class="teaching-note">
+                <strong>What happens here?</strong>
+                <p>The button sends a REST PATCH. The API changes its store, then broadcasts the updated order through SignalR.</p>
+            </div>
+        </aside>
+    </div>
+}
+
+@code {
+    private static readonly OrderStatus[] JourneyStatuses =
+        [OrderStatus.Processing, OrderStatus.Shipped, OrderStatus.Delivered];
+
+    [Parameter]
+    public Guid Id { get; set; }
+
+    private OrderDto? _order;
+    private bool _isLoading = true;
+    private bool _isSaving;
+    private string? _error;
+
+    protected override void OnInitialized() => Orders.Changed += HandleOrdersChanged;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _isLoading = true;
+        _error = null;
+        try
+        {
+            await Realtime.EnsureStartedAsync();
+            _order = Orders.GetById(Id) ?? await Api.GetOrderAsync(Id);
+            if (_order is not null)
+            {
+                Orders.Upsert(_order);
+            }
+            else
+            {
+                _error = "It may have been removed or the address is incorrect.";
+            }
+        }
+        catch (Exception exception)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task UpdateStatusAsync(OrderStatus nextStatus)
+    {
+        _isSaving = true;
+        _error = null;
+        try
+        {
+            var updated = await Api.UpdateStatusAsync(Id, nextStatus);
+            Orders.Upsert(updated);
+            _order = updated;
+        }
+        catch (Exception exception)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private bool IsReached(OrderStatus status) =>
+        Array.IndexOf(JourneyStatuses, status) <= Array.IndexOf(JourneyStatuses, _order!.Status);
+
+    private static string StatusDescription(OrderStatus status) => status switch
+    {
+        OrderStatus.Processing => "The order is being prepared",
+        OrderStatus.Shipped => "The package is on its way",
+        OrderStatus.Delivered => "The order has arrived",
+        _ => string.Empty
+    };
+
+    private void HandleOrdersChanged()
+    {
+        _order = Orders.GetById(Id) ?? _order;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => Orders.Changed -= HandleOrdersChanged;
+}

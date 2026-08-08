@@ -1,0 +1,61 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject OrderRealtimeClient Realtime
+@inject ApiSettings Settings
+
+<div class="app-shell">
+    <header class="site-header">
+        <div class="header-inner">
+            <NavLink class="brand" href="" Match="NavLinkMatch.All">
+                <span class="brand-mark" aria-hidden="true"><span></span></span>
+                <span>
+                    <strong>Order Pulse</strong>
+                    <small>SignalR learning lab</small>
+                </span>
+            </NavLink>
+
+            <nav aria-label="Primary navigation">
+                <NavLink href="" Match="NavLinkMatch.All">Orders</NavLink>
+                <a href="@Settings.ScalarUrl" target="_blank" rel="noreferrer">API explorer ↗</a>
+            </nav>
+
+            <div class="connection-pill @Realtime.Status.ToString().ToLowerInvariant()">
+                <span class="connection-dot"></span>
+                @ConnectionLabel
+            </div>
+        </div>
+    </header>
+
+    <main class="page-content">
+        @Body
+    </main>
+
+    <footer>REST changes state · SignalR delivers the news</footer>
+</div>
+
+@code {
+    private string ConnectionLabel => Realtime.Status switch
+    {
+        RealtimeStatus.Connected => "Live",
+        RealtimeStatus.Connecting => "Connecting",
+        RealtimeStatus.Reconnecting => "Reconnecting",
+        _ => "Offline"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        Realtime.StatusChanged += HandleStatusChanged;
+        try
+        {
+            await Realtime.EnsureStartedAsync();
+        }
+        catch
+        {
+            // Pages surface API errors; the header communicates connection state.
+        }
+    }
+
+    private void HandleStatusChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Realtime.StatusChanged -= HandleStatusChanged;
+}

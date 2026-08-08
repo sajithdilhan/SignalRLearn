@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SignalRLearn.Api/SignalRLearn.Api.csproj" />
+    <Project Path="src/SignalRLearn.Client/SignalRLearn.Client.csproj" />
+    <Project Path="src/SignalRLearn.Contracts/SignalRLearn.Contracts.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SignalRLearn.Api.Tests/SignalRLearn.Api.Tests.csproj" />
+  </Folder>
+</Solution>

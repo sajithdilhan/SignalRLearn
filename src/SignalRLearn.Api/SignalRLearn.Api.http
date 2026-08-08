@@ -1,0 +1,24 @@
+@SignalRLearn_Api = https://localhost:7232
+@orderId = replace-with-an-order-id
+
+### List all orders
+GET {{SignalRLearn_Api}}/api/orders
+Accept: application/json
+
+### Create an order
+POST {{SignalRLearn_Api}}/api/orders
+Content-Type: application/json
+
+{
+  "customerName": "Sam Lee",
+  "productName": "Mechanical keyboard",
+  "quantity": 1
+}
+
+### Update an order status
+PATCH {{SignalRLearn_Api}}/api/orders/{{orderId}}/status
+Content-Type: application/json
+
+{
+  "status": "Shipped"
+}
