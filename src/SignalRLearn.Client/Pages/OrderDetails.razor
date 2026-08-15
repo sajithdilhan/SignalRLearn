@@ -88,7 +88,14 @@ else
             <dl>
                 <div><dt>Customer</dt><dd>@_order.CustomerName</dd></div>
                 <div><dt>Product</dt><dd>@_order.ProductName</dd></div>
-                <div><dt>Quantity</dt><dd>@_order.Quantity</dd></div>
+                <div>
+                    <dt>Quantity</dt>
+                    <dd>@_order.Quantity</dd>
+                    @if (_quantityMessage is not null)
+                    {
+                        <p class="quantity-alert @_quantityMessageClass">@_quantityMessage</p>
+                    }
+                </div>
                 <div><dt>Created</dt><dd>@_order.CreatedAtUtc.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</dd></div>
                 <div><dt>Last update</dt><dd>@_order.UpdatedAtUtc.ToLocalTime().ToString("dd MMM yyyy, HH:mm:ss")</dd></div>
             </dl>
@@ -111,13 +118,21 @@ else
     private bool _isLoading = true;
     private bool _isSaving;
     private string? _error;
+    private string? _quantityMessage;
+    private string? _quantityMessageClass;
 
-    protected override void OnInitialized() => Orders.Changed += HandleOrdersChanged;
+    protected override void OnInitialized()
+    {
+        Orders.Changed += HandleOrdersChanged;
+        Realtime.QuantityChanged += HandleQuantityChanged;
+    }
 
     protected override async Task OnParametersSetAsync()
     {
         _isLoading = true;
         _error = null;
+        _quantityMessage = null;
+        _quantityMessageClass = null;
         try
         {
             await Realtime.EnsureStartedAsync();
@@ -178,5 +193,31 @@ else
         _ = InvokeAsync(StateHasChanged);
     }
 
-    public void Dispose() => Orders.Changed -= HandleOrdersChanged;
+    private void HandleQuantityChanged(OrderQuantityChangedEvent update)
+    {
+        if (update.Order.Id != Id)
+        {
+            return;
+        }
+
+        var delta = update.Order.Quantity - update.PreviousQuantity;
+        if (delta > 0)
+        {
+            _quantityMessageClass = "positive";
+            _quantityMessage = $"Quantity increased from {update.PreviousQuantity} to {update.Order.Quantity} (+{delta}).";
+        }
+        else
+        {
+            _quantityMessageClass = "warning";
+            _quantityMessage = $"Quantity decreased from {update.PreviousQuantity} to {update.Order.Quantity} ({delta}).";
+        }
+
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Orders.Changed -= HandleOrdersChanged;
+        Realtime.QuantityChanged -= HandleQuantityChanged;
+    }
 }

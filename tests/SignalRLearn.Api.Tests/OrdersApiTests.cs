@@ -542,6 +542,95 @@ public sealed class OrdersApiTests : IClassFixture<WebApplicationFactory<Program
         Assert.True(originalOrder != updatedOrder);
     }
 
+    [Fact]
+    public async Task Update_quantity_on_a_processing_order_succeeds()
+    {
+        var created = await CreateOrderAsync();
+
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"/api/orders/{created.Id}/quantity")
+        {
+            Content = JsonContent.Create(
+                new UpdateOrderQuantityRequest { Quantity = 5 },
+                options: JsonOptions)
+        };
+        var response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var updated = await response.Content.ReadFromJsonAsync<OrderDto>(JsonOptions);
+        Assert.Equal(5, updated!.Quantity);
+    }
+
+    [Fact]
+    public async Task Update_quantity_on_a_shipped_order_returns_validation_problem()
+    {
+        var created = await CreateOrderAsync();
+        await UpdateOrderStatusAsync(created.Id, OrderStatus.Shipped);
+
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"/api/orders/{created.Id}/quantity")
+        {
+            Content = JsonContent.Create(
+                new UpdateOrderQuantityRequest { Quantity = 5 },
+                options: JsonOptions)
+        };
+        var response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("Shipped", body);
+    }
+
+    [Fact]
+    public async Task Update_quantity_with_invalid_value_returns_400()
+    {
+        var created = await CreateOrderAsync();
+
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"/api/orders/{created.Id}/quantity")
+        {
+            Content = JsonContent.Create(
+                new UpdateOrderQuantityRequest { Quantity = 0 },
+                options: JsonOptions)
+        };
+        var response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("Quantity", body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Update_quantity_for_non_existent_order_returns_404()
+    {
+        var nonExistentId = Guid.NewGuid();
+
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"/api/orders/{nonExistentId}/quantity")
+        {
+            Content = JsonContent.Create(
+                new UpdateOrderQuantityRequest { Quantity = 5 },
+                options: JsonOptions)
+        };
+        var response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Update_quantity_to_same_value_returns_200_with_unchanged_order()
+    {
+        var created = await CreateOrderAsync();
+
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"/api/orders/{created.Id}/quantity")
+        {
+            Content = JsonContent.Create(
+                new UpdateOrderQuantityRequest { Quantity = created.Quantity },
+                options: JsonOptions)
+        };
+        var response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var updated = await response.Content.ReadFromJsonAsync<OrderDto>(JsonOptions);
+        Assert.Equal(created.Quantity, updated!.Quantity);
+    }
+
     private async Task<OrderDto> CreateOrderAsync()
     {
         var response = await _client.PostAsJsonAsync("/api/orders", new CreateOrderRequest

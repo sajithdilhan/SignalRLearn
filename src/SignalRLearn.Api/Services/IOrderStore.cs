@@ -11,4 +11,6 @@ public interface IOrderStore
     OrderDto Create(CreateOrderRequest request);
 
     UpdateOrderResult UpdateStatus(Guid id, OrderStatus nextStatus);
+
+    UpdateOrderResult UpdateQuantity(Guid id, int quantity);
 }

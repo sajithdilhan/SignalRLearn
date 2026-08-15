@@ -49,6 +49,12 @@ public sealed class OrderRealtimeClient : IAsyncDisposable
             _orderState.Upsert(update.Order);
             return Task.CompletedTask;
         });
+        _connection.On<OrderQuantityChangedEvent>(nameof(IOrderClient.OrderQuantityChanged), update =>
+        {
+            _orderState.Upsert(update.Order);
+            QuantityChanged?.Invoke(update);
+            return Task.CompletedTask;
+        });
 
         _connection.Reconnecting += _ =>
         {
@@ -68,6 +74,8 @@ public sealed class OrderRealtimeClient : IAsyncDisposable
     }
 
     public event Action? StatusChanged;
+
+    public event Action<OrderQuantityChangedEvent>? QuantityChanged;
 
     public RealtimeStatus Status { get; private set; } = RealtimeStatus.Disconnected;
 

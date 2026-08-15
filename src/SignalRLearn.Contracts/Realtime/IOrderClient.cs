@@ -7,4 +7,6 @@ public interface IOrderClient
     Task OrderCreated(OrderDto order);
 
     Task OrderStatusChanged(OrderStatusChangedEvent update);
+
+    Task OrderQuantityChanged(OrderQuantityChangedEvent update);
 }

@@ -162,6 +162,9 @@ a.brand, a.brand:hover, a.brand * { text-decoration: none !important; }
 .facts-card dl div { padding: 13px 0; border-bottom: 1px solid var(--line); }
 .facts-card dt { margin-bottom: 4px; color: var(--muted); font-size: .68rem; font-weight: 600; }
 .facts-card dd { margin: 0; color: #dce5f1; font-size: .84rem; }
+.quantity-alert { margin: 8px 0 0; padding: 7px 10px; border-radius: 8px; font-size: .72rem; font-weight: 700; animation: reveal .22s ease-out; }
+.quantity-alert.positive { color: #6ee7b7; background: rgba(5, 150, 105, .16); }
+.quantity-alert.warning { color: #fcd34d; background: rgba(217, 119, 6, .18); }
 .teaching-note { margin-top: 22px; padding: 17px; border: 1px solid rgba(56, 189, 248, .14); border-radius: 12px; background: rgba(14, 116, 144, .08); }
 .teaching-note strong { color: #7dd3fc; font-size: .76rem; }
 .teaching-note p { margin: 7px 0 0; color: #9fb0c5; font-size: .73rem; line-height: 1.6; }

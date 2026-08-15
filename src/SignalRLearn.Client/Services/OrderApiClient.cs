@@ -52,6 +52,20 @@ public sealed class OrderApiClient(HttpClient httpClient)
         return (await response.Content.ReadFromJsonAsync<OrderDto>(SerializerOptions, cancellationToken))!;
     }
 
+    public async Task<OrderDto> UpdateQuantityAsync(
+        Guid id,
+        int quantity,
+        CancellationToken cancellationToken = default)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Put, $"api/orders/{id}/quantity")
+        {
+            Content = JsonContent.Create(new UpdateOrderQuantityRequest { Quantity = quantity }, options: SerializerOptions)
+        };
+        using var response = await httpClient.SendAsync(message, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return (await response.Content.ReadFromJsonAsync<OrderDto>(SerializerOptions, cancellationToken))!;
+    }
+
     private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {
         if (response.IsSuccessStatusCode)

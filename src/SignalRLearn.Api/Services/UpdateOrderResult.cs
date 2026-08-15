@@ -14,4 +14,5 @@ public sealed record UpdateOrderResult(
     UpdateOrderOutcome Outcome,
     OrderDto? Order = null,
     OrderStatus? PreviousStatus = null,
-    string? Error = null);
+    string? Error = null,
+    int? PreviousQuantity = null);

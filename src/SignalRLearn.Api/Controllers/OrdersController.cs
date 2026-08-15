@@ -72,4 +72,35 @@ public sealed class OrdersController(
 
         return Ok(result.Order);
     }
+
+    [HttpPut("{id:guid}/quantity")]
+    [ProducesResponseType<OrderDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<OrderDto>> UpdateQuantity(
+        Guid id,
+        UpdateOrderQuantityRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = orderStore.UpdateQuantity(id, request.Quantity);
+
+        if (result.Outcome == UpdateOrderOutcome.NotFound)
+        {
+            return NotFound();
+        }
+
+        if (result.Outcome == UpdateOrderOutcome.InvalidTransition)
+        {
+            ModelState.AddModelError(nameof(request.Quantity), result.Error!);
+            return ValidationProblem(ModelState);
+        }
+
+        if (result.Outcome == UpdateOrderOutcome.Updated)
+        {
+            await hubContext.Clients.All.OrderQuantityChanged(
+                new OrderQuantityChangedEvent(result.Order!, result.PreviousQuantity!.Value));
+        }
+
+        return Ok(result.Order);
+    }
 }

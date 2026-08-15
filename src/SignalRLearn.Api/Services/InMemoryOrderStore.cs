@@ -85,6 +85,36 @@ public sealed class InMemoryOrderStore : IOrderStore
         }
     }
 
+    public UpdateOrderResult UpdateQuantity(Guid id, int quantity)
+    {
+        lock (_gate)
+        {
+            if (!_orders.TryGetValue(id, out var order))
+            {
+                return new(UpdateOrderOutcome.NotFound);
+            }
+
+            if (order.Quantity == quantity)
+            {
+                return new(UpdateOrderOutcome.Unchanged, ToDto(order), PreviousQuantity: order.Quantity);
+            }
+
+            if (order.Status != OrderStatus.Processing)
+            {
+                return new(
+                    UpdateOrderOutcome.InvalidTransition,
+                    ToDto(order),
+                    Error: $"An order's quantity cannot be changed while it is {order.Status}.");
+            }
+
+            var previousQuantity = order.Quantity;
+            order.Quantity = quantity;
+            order.UpdatedAtUtc = _timeProvider.GetUtcNow();
+
+            return new(UpdateOrderOutcome.Updated, ToDto(order), PreviousQuantity: previousQuantity);
+        }
+    }
+
     private void SeedDemoOrders()
     {
         var now = _timeProvider.GetUtcNow();
@@ -130,7 +160,7 @@ public sealed class InMemoryOrderStore : IOrderStore
         public Guid Id { get; init; }
         public required string CustomerName { get; init; }
         public required string ProductName { get; init; }
-        public int Quantity { get; init; }
+        public int Quantity { get; set; }
         public OrderStatus Status { get; set; }
         public DateTimeOffset CreatedAtUtc { get; init; }
         public DateTimeOffset UpdatedAtUtc { get; set; }
