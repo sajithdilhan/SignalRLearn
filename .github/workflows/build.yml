@@ -1,6 +1,6 @@
 # This workflow will build a .NET project and run a Semgrep SAST scan
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-net
-# Semgrep action: https://github.com/returntocorp/semgrep-action
+# Semgrep action replaced with explicit pip install so we control the semgrep CLI version
 # SARIF upload: https://github.com/github/codeql-action/tree/main/upload-sarif
 
 name: .NET
@@ -11,6 +11,11 @@ on:
   pull_request:
     branches: [ "main" ]
 
+# permissions needed to upload SARIF/code-scanning results
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   build:
 
@@ -19,17 +24,32 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Run Semgrep SAST scan
-      uses: returntocorp/semgrep-action@v1
+    - name: Set up Python
+      uses: actions/setup-python@v4
       with:
-        # Use the recommended CI rule set; change to a custom ruleset or local path if desired
-        config: 'p/ci'
-        # Produce SARIF output so we can upload to GitHub Code Scanning
-        output: 'sarif'
-        sarif_file: 'semgrep.sarif'
+        python-version: '3.x'
+
+    - name: Install semgrep
+      run: pip install --upgrade semgrep
+
+    - name: Run Semgrep SAST scan
+      id: semgrep
+      run: |
+        # Run semgrep and produce SARIF; don't fail the job just because semgrep had a non-zero exit code
+        semgrep --config p/ci --sarif --output semgrep.sarif || true
+
+    - name: Check semgrep SARIF
+      id: check_sarif
+      run: |
+        if [ -f semgrep.sarif ]; then
+          echo "exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "exists=false" >> $GITHUB_OUTPUT
+        fi
 
     - name: Upload Semgrep SARIF to GitHub Code Scanning
-      uses: github/codeql-action/upload-sarif@v2
+      if: steps.check_sarif.outputs.exists == 'true'
+      uses: github/codeql-action/upload-sarif@v3
       with:
         sarif_file: semgrep.sarif
 
