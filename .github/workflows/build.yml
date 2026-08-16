@@ -20,7 +20,7 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Run Semgrep SAST scan
-      uses: returntocorp/semgrep-action@v2
+      uses: returntocorp/semgrep-action@v1
       with:
         # Use the recommended CI rule set; change to a custom ruleset or local path if desired
         config: 'p/ci'
